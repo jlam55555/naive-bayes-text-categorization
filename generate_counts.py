@@ -1,5 +1,6 @@
 # TODO: add description for this file
 # TODO: add more debugging output
+# this is in a separate file because it takes some time to read the corpora
 
 import nltk
 import numpy as np
