@@ -1,3 +1,5 @@
+# TODO: implement mp version of this
+
 import numpy as np
 from collections.abc import Collection
 
