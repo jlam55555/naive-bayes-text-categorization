@@ -1,18 +1,19 @@
 # TODO: add description for this file
 # TODO: add more debugging output
-# this is in a separate file because it takes some time to read the corpora
 
 import nltk
 import numpy as np
-import pickle
+import functools
 
 # required for word tokenizer
 nltk.download('punkt')
 
-# get training dataset parameters
+# get dataset parameters
 train_labels_file = input('Enter training file: ')
-pickle_file = input('Enter pickle outfile: ')
+test_file = input('Enter test file: ')
+out_file = input('Enter out file: ')
 
+### TRAINING STAGE ###
 # from training labels, get list of all classes
 # each class will store its own document count
 class_hist = {}
@@ -64,13 +65,38 @@ for document_filename, document_class in document_class_map.items():
         for token in nltk.tokenize.word_tokenize(''.join(document_handle.readlines())):
             vocab_array[token_index[token], class_index[document_class]] += 1
 
-# save things
-save_dict = {
-    'n_doc': n_doc,
-    'class_hist': class_hist,
-    'token_index': token_index,
-    'class_index': class_index,
-    'vocab_array': vocab_array
-}
-with open(pickle_file, 'wb+') as pickle_file_handle:
-    pickle.dump(save_dict, pickle_file_handle)
+# class conditionals: perform +1 smoothing and convert counts to log-likelihoods
+vocab_array += 1
+log_likelihoods = np.log10(vocab_array / np.sum(vocab_array, axis=0))
+
+# class priors: convert counts to log-likelihoods
+log_priors = np.log10(np.array(list(class_hist.values())) / n_doc)[np.newaxis, :]
+
+### TESTING STAGE ###
+with open(test_file, 'r') as test_file_handle:
+    test_filenames = test_file_handle.read().splitlines()
+
+# corpus files are relative to the test file, not necessarily this script directory
+path_to_test_file = '/'.join(test_file.split('/')[0:-1])
+
+class_likelihoods = np.zeros(shape=(len(test_filenames), len(class_hist)))
+for i, document_filename in enumerate(test_filenames):
+    with open(f'{path_to_test_file}/{document_filename}', 'r') as document_handle:
+        tokens = nltk.tokenize.word_tokenize(''.join(document_handle.readlines()))
+
+    # remove tokens that are not in the original vocabulary
+    tokens = filter(lambda token: token in token_index, tokens)
+
+    # calculate log-likelihood of being in each class
+    class_likelihoods[i, :] = functools.reduce(lambda acc, token: acc + log_likelihoods[token_index[token], :], tokens, log_priors)
+
+likely_class_indices = np.argmax(class_likelihoods, axis=1)
+
+# human-readable format
+class_names = list(class_hist.keys())
+likely_classes = [class_names[likely_class_index] for likely_class_index in likely_class_indices]
+
+# output to file
+with open(out_file, 'w+') as out_file_handle:
+    for filename, likely_class in zip(test_filenames, likely_classes):
+        out_file_handle.write(f'{filename} {likely_class}\n')
