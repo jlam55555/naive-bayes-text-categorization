@@ -2,7 +2,6 @@
 # TODO: make the whole model into its own class, or generally refactor
 
 import nltk
-import os
 import pickle
 import numpy as np
 import functools
@@ -31,13 +30,18 @@ log_likelihoods = np.log10(vocab_array / np.sum(vocab_array, axis=0))
 log_priors = np.log10(np.array(list(class_hist.values())) / n_doc)[np.newaxis, :]
 
 # categorize a directory of files
-# corpus_dir = input('Test corpus directory: ')
-corpus_dir = 'TC_provided/corpus1/test'
+test_file = input('Enter test file: ')
+out_file = input('Enter out file: ')
 
-document_filenames = os.listdir(corpus_dir)
-class_likelihoods = np.zeros(shape=(len(document_filenames), len(class_hist)))
-for i, document_filename in enumerate(document_filenames):
-    with open(f'{corpus_dir}/{document_filename}', 'r') as document_handle:
+with open(test_file, 'r') as test_file_handle:
+    test_filenames = test_file_handle.read().splitlines()
+
+# corpus files are relative to the train labels file, not necessarily this script directory
+path_to_test_file = '/'.join(test_file.split('/')[0:-1])
+
+class_likelihoods = np.zeros(shape=(len(test_filenames), len(class_hist)))
+for i, document_filename in enumerate(test_filenames):
+    with open(f'{path_to_test_file}/{document_filename}', 'r') as document_handle:
         tokens = nltk.tokenize.word_tokenize(''.join(document_handle.readlines()))
 
     # remove tokens that are not in the original vocabulary
@@ -52,6 +56,6 @@ likely_class_indices = np.argmax(class_likelihoods, axis=1)
 class_names = list(class_hist.keys())
 likely_classes = [class_names[likely_class_index] for likely_class_index in likely_class_indices]
 
-import pandas as pd
-print(pd.DataFrame(data=[document_filenames, likely_classes]).values.T)
-
+with open(out_file, 'w+') as out_file_handle:
+    for filename, likely_class in zip(test_filenames, likely_classes):
+        out_file_handle.write(f'{filename} {likely_class}\n')
