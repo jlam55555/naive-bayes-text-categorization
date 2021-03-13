@@ -1,102 +1,71 @@
-# TODO: implement mp version of this
-
-import numpy as np
+from collections import defaultdict
 from typing import Collection
+from math import log
+
 
 class NaiveBayesClassifier:
-    """
-    Perform Naive Bayes bag-of-words text categorization with Laplace smoothing.
-    This class does not perform tokenization, and it expects the full set of
-    tokens (the vocabulary) and class labels to be known beforehand.
 
-    Equations for Naive Bayes:
-    - P(C) = N_C / N_doc
-    - P(w_i|C) = (count(w_i, C) + 1) / (\sum_{w\in V}{count(w, C) + 1})
+    def __init__(self, smoothing_factor=0.05) -> None:
+        # for training/inference
+        self.vocab = set()
 
-    Need to keep track of:
-    - number of documents
-    - number of documents in each class
-    - total words for each class
-    - each vocabulary word count for each class
-    """
+        # for training
+        self.counts = defaultdict(lambda: defaultdict(int))
+        self.classes = defaultdict(int)
+        self.sf = smoothing_factor
 
-    def __init__(self, vocab_set: Collection[str], class_set: Collection[str]):
-        """
-        Naive Bayes text categorizer
+        # for inference
+        self.llikelihoods = {}
+        self.lpriors = defaultdict(float)
+        self.compiled = False
 
-        :param vocab:   collection of (all, unique) string tokens
-        :param classes: collection of (all, unique) string document classes
-        """
+    def train(self, tokens: Collection[str], cat: str) -> None:
+        assert not self.compiled, 'model is already compiled'
 
-        # manage counts of tokens for class-conditional probabilities
-        self.vocab_array = np.zeros(shape=(len(vocab_set), len(class_set)),
-                                    dtype=np.uintc)
-
-        # string -> index mappings
-        self.token_index = {word: i for i, word in enumerate(vocab_set)}
-        self.class_index = {clss: i for i, clss in enumerate(class_set)}
-        self.class_list = list(class_set)
-
-        # manage category and total document counts for class priors
-        self.doc_count = 0
-        self.class_doc_counts = np.zeros(shape=(len(class_set), ))
-
-        # when built
-        self.log_likelihoods = self.log_priors = None
-
-        self.built = False
-
-    def train_document(self, tokens: Collection[str], document_class: str):
-        """
-        Trains on a document
-
-        :param tokens:          collection of string tokens in a document
-        :param document_class:  class label of the current document
-        :return:                None
-        """
-        assert not self.built, 'model must be trained before build'
-
-        class_index = self.class_index[document_class]
         for token in tokens:
-            self.vocab_array[self.token_index[token], class_index] += 1
+            self.vocab.add(token)
+            self.counts[cat][token] += 1
 
-        # update document counts for class priors
-        self.doc_count += 1
-        self.class_doc_counts[class_index] += 1
+        self.classes[cat] += 1
 
-    def build_model(self):
-        """
-        Computes class-conditional token probabilities and class priors from
-        training counts for use at inference-time
+    def compile(self) -> None:
+        assert not self.compiled, 'model is already compiled'
 
-        :return:    None
-        """
-        assert not self.built, 'model is already built'
+        # calculate log P(w|C)
+        vocab_size = len(self.vocab)
+        for cls, tokens in self.counts.items():
+            cls_token_sum = sum(tokens.values()) + vocab_size * self.sf
+            cls_default_smoothed = log(self.sf / cls_token_sum)
+            self.llikelihoods[cls] = defaultdict(lambda: cls_default_smoothed)
+            for token, count in tokens.items():
+                self.llikelihoods[cls][token] = \
+                    log((count + self.sf) / cls_token_sum)
 
-        # perform +1 (Laplace) smoothing
-        self.vocab_array += 1
+        # calculate log P(C)
+        cls_doc_sum = sum(self.classes.values())
+        for cls, doc_count in self.classes.items():
+            self.lpriors[cls] = log(doc_count / cls_doc_sum)
 
-        # convert class-conditionals to log-likelihoods (base-10 is arbitrary)
-        self.log_likelihoods = np.log10(self.vocab_array /
-                                        np.sum(self.vocab_array, axis=0))
-
-        # convert prior counts to log-likelihoods
-        self.log_priors = np.log10(self.class_doc_counts /
-                                   self.doc_count)[np.newaxis, :]
-
-        self.built = True
+        # destroy old count data
+        self.counts = self.classes = None
+        self.compiled = True
 
     def predict(self, tokens: Collection[str]) -> str:
-        """
-        Predict class of a document given its tokens
+        assert self.compiled, 'model is not compiled'
 
-        :param tokens:  collection of string tokens in a document
-        :return:        predicted class label for the document
-        """
-        assert self.built, 'model must be built before prediction'
+        # discard tokens not in the training set
+        tokens = list(filter(lambda token: token in self.vocab, tokens))
 
-        likelihoods = np.array(self.log_priors)
-        for token in filter(lambda token: token in self.token_index, tokens):
-            likelihoods += self.log_likelihoods[self.token_index[token], :]
+        best_score, best_cls = float('-inf'), ''
+        for cls in self.lpriors:
+            score = self.lpriors[cls]
 
-        return self.class_list[np.argmax(likelihoods, axis=1)[0]]
+            for token in tokens:
+                score += self.llikelihoods[cls][token]
+
+            if score > best_score:
+                best_score = score
+                best_cls = cls
+
+        assert best_cls != '', 'could not predict best class'
+        return best_cls
