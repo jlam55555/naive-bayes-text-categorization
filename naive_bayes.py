@@ -5,7 +5,7 @@ from math import log
 
 class NaiveBayesClassifier:
 
-    def __init__(self, smoothing_factor=0.05) -> None:
+    def __init__(self, smoothing_factor=0.07) -> None:
         # for training/inference
         self.vocab = set()
 

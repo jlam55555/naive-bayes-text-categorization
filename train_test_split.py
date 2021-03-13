@@ -37,7 +37,7 @@ test_labels_filename = input(f'Test labels filename [{default_test_labels_filena
 
 # get train_test_split
 default_split = 0.8
-split = input(f'Train/test split [0.8]: ') or default_split
+split = float(input(f'Train/test split [0.8]: ') or default_split)
 
 # perform split
 with open(train_file, 'r') as train_file_handle, \
