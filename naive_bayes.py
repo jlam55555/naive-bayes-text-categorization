@@ -22,6 +22,8 @@ class NaiveBayesClassifier:
     def train(self, tokens: Collection[str], cat: str) -> None:
         assert not self.compiled, 'model is already compiled'
 
+        tokens = set(tokens)
+
         for token in tokens:
             self.vocab.add(token)
             self.counts[cat][token] += 1
@@ -34,7 +36,8 @@ class NaiveBayesClassifier:
         # calculate log P(w|C)
         vocab_size = len(self.vocab)
         for cls, tokens in self.counts.items():
-            cls_token_sum = sum(tokens.values()) + vocab_size * self.sf
+            # cls_token_sum = sum(tokens.values()) + vocab_size * self.sf
+            cls_token_sum = self.classes[cls] #+ vocab_size * self.sf
             cls_default_smoothed = log(self.sf / cls_token_sum)
             self.llikelihoods[cls] = defaultdict(lambda: cls_default_smoothed)
             for token, count in tokens.items():
@@ -52,6 +55,8 @@ class NaiveBayesClassifier:
 
     def predict(self, tokens: Collection[str]) -> str:
         assert self.compiled, 'model is not compiled'
+
+        tokens = set(tokens)
 
         # discard tokens not in the training set
         tokens = list(filter(lambda token: token in self.vocab, tokens))
